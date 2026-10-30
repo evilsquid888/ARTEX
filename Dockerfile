@@ -67,8 +67,14 @@ RUN set -eux; \
     ln -s /opt/bbot/bin/bbot /usr/local/bin/bbot; \
     bbot -y --install-all-deps; \
     bbot --version >/dev/null; \
-    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness >/dev/null 2>&1 || true; \
-    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert,gowitness --no-color >/tmp/bbot-dry.log 2>&1 || true; \
+    # arm64 host patch: gowitness ships an x86_64 Chrome binary and hard-fails
+    # setup on this arch, which would mask the sanity-check "ERRR" grep below.
+    # Chromium is installed later (via Playwright) and bbot can pick it up at
+    # runtime via chrome_path if gowitness is explicitly requested. Drop it
+    # from the sanity-check module list only; the gowitness module itself
+    # stays installed in the image.
+    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert >/dev/null 2>&1 || true; \
+    bbot --dry-run -t example.com -m wafw00f,paramminer_getparams,lightfuzz,sslcert --no-color >/tmp/bbot-dry.log 2>&1 || true; \
     ! grep -qE "Installing|ERRR|CRITICAL" /tmp/bbot-dry.log || { cat /tmp/bbot-dry.log; exit 1; }
 
 
@@ -82,6 +88,45 @@ RUN npm install -g @playwright/mcp@latest @playwright/cli@latest playwright@late
     && playwright-cli --help \
     && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
+
+# Active Directory / Windows attack toolbox. HTB AD chains (ADCS ESC7/ESC8, NTLM
+# relay, Kerberos, SMB/LDAP/RDP, WinRM) need these; the recon staples above don't
+# cover them. Baked in so they survive image rebuilds (they were hand-installed into
+# a running container during the Omniscient push). impacket/certipy/bloodhound go
+# into the image's system python (CLI scripts land in /usr/local/bin); evil-winrm is
+# a ruby gem. Pinned; upgrade deliberately. NOTE: deliberately no SageMath/conda here
+# — that was a one-off for a single isogeny crypto challenge, not general tooling.
+#
+# Also rewrite the apt sources to https: the agent runs under a 443-only egress
+# allowlist at runtime, so http (port 80) apt fetches are dropped. Harmless at build.
+ARG IMPACKET_VERSION=0.13.1
+ARG CERTIPY_VERSION=5.1.0
+ARG BLOODHOUND_PY_VERSION=1.9.0
+ARG EVILWINRM_VERSION=4.1
+RUN set -eux; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    sed -i -E 's|http://(deb\|security)\.debian\.org|https://\1.debian.org|g' \
+      /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      smbclient krb5-user ldap-utils freerdp2-x11 \
+      ruby ruby-dev build-essential libreadline-dev; \
+    pip install --no-cache-dir \
+      "impacket==${IMPACKET_VERSION}" \
+      "certipy-ad==${CERTIPY_VERSION}" \
+      "bloodhound==${BLOODHOUND_PY_VERSION}"; \
+    gem install evil-winrm -v "${EVILWINRM_VERSION}" --no-document; \
+    # sanity checks (fail the build if any core tool is missing)
+    secretsdump.py -h >/dev/null; \
+    ntlmrelayx.py -h >/dev/null; \
+    certipy -h >/dev/null; \
+    bloodhound-python -h >/dev/null; \
+    evil-winrm --help >/dev/null 2>&1 || evil-winrm 2>/dev/null || true; \
+    command -v xfreerdp >/dev/null; \
+    command -v smbclient >/dev/null; \
+    command -v ldapsearch >/dev/null; \
+    command -v kinit >/dev/null; \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # pre-built binary for the matching architecture (dist/amd64/artex or dist/arm64/artex)
 COPY dist/${TARGETARCH}/artex /app/artex

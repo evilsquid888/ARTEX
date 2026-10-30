@@ -64,3 +64,13 @@ posture-runs/
 
 # benchmark runner output (one dir per run)
 benchmark-results/
+
+# host-local deployment files for this specific install (secrets / host-pinned
+# config / runtime logs — never committed upstream)
+/.env.docker
+/artex.log
+/run.sh
+/docker-compose.full.yml
+/scripts/artex-egress.sh
+/scripts/artex-pub443-refresh.sh
+/scripts/pub443-allow.list
