@@ -148,6 +148,21 @@ ARTEX_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 
 ---
 
+## Terminal UI over SSH
+
+Monitor tasks, inspect worker/tool activity, and chat with ARTEX from your terminal:
+
+```bash
+go build -o artex-tui ./cmd/artex-tui
+./artex-tui --login
+```
+
+Run it on your ARTEX host after connecting with SSH. The client connects to
+`http://127.0.0.1:8787` by default and leaves ARTEX running when you quit.
+See [terminal setup and key bindings](cmd/artex-tui/README.md).
+
+---
+
 ## Backups
 
 `scripts/backup.sh` dumps the Postgres database (and optionally the data

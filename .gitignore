@@ -36,6 +36,7 @@ Thumbs.db
 
 # single-binary artifact with embedded frontend
 /artex
+/artex-tui
 # intermediate artifacts left next to the executable by one-click update (staging file / backup / failed version / upgrade marker)
 /artex.new
 /artex.new.sha256
